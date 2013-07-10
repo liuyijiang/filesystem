@@ -1,0 +1,48 @@
+nginx-mogilefs 模块配置
+module下载
+1 git srccode 地址 https://github.com/vkholodkov/nginx-mogilefs-module
+2 下载tar.gz  地址 http://www.grid.net.ru/nginx/mogilefs.en.html
+
+安装
+1 nginx模块添加
+  ./configure --add-module=<nginx-mogilefs 解压的路径> 
+  
+2 配置文件  
+单个tracker
+location /img/ {
+
+	mogilefs_tracker 192.168.2.114:7001;  #tracker 地址          
+	mogilefs_domain testdomain;#domain
+	mogilefs_methods GET;
+	mogilefs_noverify on;
+
+	mogilefs_pass {
+		proxy_pass $mogilefs_path;
+		proxy_hide_header Content-Type;
+		proxy_buffering off;
+	}
+}
+多个tracker 负载均衡
+upstream online_mogilefs {
+    server 192.168.2.114:7001; 
+    #server 10.0.0.2:7001;
+}
+
+location /img/ {
+
+	mogilefs_tracker online_mogilefs;  #tracker 地址          
+	mogilefs_domain testdomain;#domain
+	mogilefs_methods GET;
+	mogilefs_noverify on;
+
+	mogilefs_pass {
+		proxy_pass $mogilefs_path;
+		proxy_hide_header Content-Type;
+		proxy_buffering off;
+	}
+}
+
+访问的url 
+http://192.168.2.114/img/z.jpg
+注意 z.jpg 为文件的key
+附带java client代码 fs.storeFile("z.jpg", "testclass",file); // key  class

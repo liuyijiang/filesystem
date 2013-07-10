@@ -1,0 +1,110 @@
+setup in ubuntu10.04
+mogilefs 依赖mysql 
+0 由于ubuntu vi 有问题 所有需要重装 sudo apt-get remove vim-common   apt-get install vim
+  安装 apt-get install openssh-server
+1 安装mysql apt-get install mysql-server
+2 安装依赖包系列 GCC  apt-get install build-essential
+3 安装CPANMinus
+  wget http://xrl.us/cpanm  --no-check-certificate -O /sbin/cpanm 
+  chmod +x  /sbin/cpanm 
+  
+4 开始安装
+cpanm MogileFS::Server
+cpanm MogileFS::Utils
+cpanm MogileFS::Client
+cpanm IO::AIO # 建议安装,会性能好些 可能会出现it to date
+
+5 配置数据库  建 MogileFS 用的数据库和用户名.在使用前,非常建议在 mysql 对 my.cnf 中设置 'innodb_file_per_table = 1',不然数据量大了后,给数据文件存给每个表的操作非常麻烦.
+CREATE DATABASE MogileFS DEFAULT CHARACTER SET utf8 COLLATE utf8_bin;
+grant all on MogileFS.* to 'mogile'@'%' identified by 'mogile';
+UPDATE mysql.user SET Password=PASSWORD('newpass') WHERE User='mogile';
+FLUSH PRIVILEGES;
+quit 
+ 
+6 初始化数据库配置 
+mogdbsetup --dbhost=127.0.0.1 --dbname=MogileFS --dbuser=mogile --dbpass=mogilepw
+
+7创建配置文件  创建配置文件目录,和修改你的主配置文件,这个是 MogileFS 的主 daemon , mogilefsd 就是调度器的配置文件.
+ mkdir /etc/mogilefs/
+ vi /etc/mogilefs/mogilefsd.conf 加入如下类容
+# Database connection information
+db_dsn = DBI:mysql:MogileFS:host=mogiledb.yourdomain.com
+db_user = mogile
+db_pass = mogilepw
+
+# IP:PORT to listen on for MogileFS client requests
+listen = 127.0.0.1:7001
+
+# Optional, if you don't define the port above.
+conf_port = 7001
+
+# Number of query workers to start by default.
+query_jobs = 10
+
+# Number of delete workers to start by default.
+delete_jobs = 1
+
+# Number of replicate workers to start by default.
+replicate_jobs = 5
+
+# Number of reaper workers to start by default.
+# (you don't usually need to increase this)
+reaper_jobs = 1
+
+
+8 由于 mogilefsd 不能用 root 用户启动.所以添加 mogile 用户 ,并使用 mogile 的用户启动 tracker node
+adduser mogile
+su - mogile
+$ mogilefsd -c /etc/mogilefs/mogilefsd.conf --daemon  //启动mogilefs tracker（最好先配置主机 设备后启动）
+
+9 配置“存储节点”storage nodes
+vim /etc/mogilefs/mogstored.conf
+maxconns = 10000
+httplisten = 0.0.0.0:7500
+mgmtlisten = 0.0.0.0:7501
+docroot=/var/mogdata
+#mogstored --daemon //启动存储节点（最好先配置主机 设备后启动）
+
+10 开始配置
+使用工具'mogadm' 将每个storage 加入数据库中
+例如
+Storage server : 192.168.2.114/或者其他的ip地址  (监听端口:7500)
+Tracker server : 192.168.2.114 (监听端口:7001)
+
+10.1//将storage 服务器加入到存储系统中
+mogadm --lib=/usr/local/share/perl/5.8.4 --trackers=192.168.2.114:6001 
+       host add mogilestorage --ip=192.168.2.114 --port=7500 --status=alive
+       
+（查看服务器是否加入成功  mogadm --lib=/usr/local/share/perl/5.8.4 --trackers=192.168.0.3:6001 host list）
+
+10.2//你需要为每个存储主机添加设备,如果出现错误,所以你需要添加一个唯一的设备id:
+mogadm --lib=/usr/local/share/perl/5.8.4 --trackers=192.168.0.3:6001 device add mogilestorage 1 
+ 
+（查看设备状态mogadm --lib=/usr/local/share/perl/5.8.4 --trackers=192.168.0.3:6001 device list）
+
+简单的结果如下：
+mogilestorage [1]: alive used(G) free(G) total(G)
+dev1: alive          2.886       5.766       8.651
+意思是 "mogilestorage" 有一个主机名字是  "dev1" ，并且这个设备是 “alive” ， 你可以在存储服务器创建一个目录： 
+
+10.3//创建设备文件夹
+mkdir -p /var/mogdata/dev1
+ 
+10.4//这个时候启动tracker 和 strorage服务器 
+mogstored --daemon
+su mogile (不能用root启动)
+mogilefsd -c /etc/mogilefs/mogilefsd.conf --daemon
+
+11//
+mogadm --lib=/usr/local/share/perl/5.8.4 --trackers=192.168.0.3:6001 check (状态监测)
+
+11.1//创建一个 domain:
+mogadm --lib=/usr/local/share/perl/5.8.4 --trackers=192.168.0.3:6001 domain add testdomain
+11.2//向domain添加一个 class :
+mogadm --lib=/usr/local/share/perl/5.8.4 --trackers=1192.168.0.3:6001 class add testdomain testclass
+  
+参考
+http://www.php-oa.com/2010/09/26/perl-mogilefs-2.html
+http://hi.baidu.com/billdkj/item/e123580eb934abc12e4c6b2d
+一些问题
+http://www.iteye.com/problems/38823

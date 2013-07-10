@@ -1,0 +1,2 @@
+ant 编译<project name="mogilefs" default="compile">
+修改default 对应的 <target name="doc"> 就可以编译

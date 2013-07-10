@@ -1,1 +1,26 @@
 基本概念
+基本概念
+Tracker（跟踪器 ,调度器）- (MogileFSd 进程)
+这个是 MogileFS 的核心部分,通俗点讲,就他是一个调度器.MogileFSd
+ 进程就是 trackers 进程程序,类似 MogileFS 的 wiki 上介绍的,
+ trackers 做了很多工作,Replication ,Deletion,Query,Reaper,Monitor 等等.这个是基于事件的( event-based ) 
+ 父进程/消息总线来管理所有来之于客户端应用的交互(requesting operations to be performed),
+包括将请求负载平衡到多个"query workers"中,然后让 MogileFSd 的子进程去处理.
+mogadm,mogtool 的所有操作都要跟 trackers 打交道,Client 的一些操作也需要定义好 trackers,
+因此最好同时运行多个 trackers 来做负载均衡.trackers 也可以只运行在一台机器 上,也可以跟其他程序运行在一起(不建议).
+tracker 配置文件： /etc/mogilefs/mogilefsd.conf
+
+
+
+数据库（MySQL）部分
+如上图所显示的,数据库用来存放 MogileFS 的元数据 (命名空间, 和文件在哪里). 是 Trackers 来操作和管理它.你可以用 mogdbsetup 程序来初始化数据库.因为数据库保存了MogileFS的所有元数据,如果这儿挂了,那么整个 MogileFS 将处于不可用状态.因此最好是HA结构.
+
+
+
+存储节点(Storage Nodes )-(mogstored 进程, Apache 和 Nginx 等)
+实际文件存放的地方. 存储节点是一个 HTTP 服务器,用来做删除,存放,重命名等事情.任何 WebDAV 服务器都可以, 不过推荐使用 mogstored . MogileFSd 可以配置到两个机器上使用不同端口… mogstored 来进行所有的 DAV 操作和流量,IO监测, 并且你自己选择的 HTTP 服务器(默认为 perlbal)用来做 GET 操作给客户端提供文件.
+典型的应用是一个挂载点有一个大容量的 SATA 磁盘,它们被挂载到 /var/mogdata/devNN. 只要配置完配置文件后 mogstored 程序的启动将会使本机成为一个存储节点.当然还需要 mogadm 这个工具增加这台机器到 Cluster 中.
+mogstored 的配置文件: /etc/mogilefs/mogstored.conf
+
+
+http://www.php-oa.com/2010/09/26/perl-mogilefs-1.html
